@@ -326,7 +326,7 @@ bgcolor(inSession ? color.new(neutralColor, 90) : na, title = "Session Backgroun
 pHigh = plot(plotHigh, "OR High", color.new(neutralColor, 20), 2, plot.style_linebr, force_overlay = true)
 pLow  = plot(plotLow, "OR Low", color.new(neutralColor, 20), 2, plot.style_linebr, force_overlay = true)
 
-fill(pHigh, pLow, plotHigh, plotLow, color.new(neutralColor, bgTransp), color.new(neutralColor, bgTransp), "Range Fill", force_overlay = true)
+fill(pHigh, pLow, plotHigh, plotLow, color.new(neutralColor, bgTransp), color.new(neutralColor, bgTransp), "Range Fill")
 
 pu1 = plot(plotU1, "Upper Ext 1", color.new(bullColor, 40), 1, plot.style_linebr, force_overlay = true)
 pu2 = plot(plotU2, "Upper Ext 2", color.new(bullColor, 40), 1, plot.style_linebr, force_overlay = true)
@@ -336,13 +336,13 @@ pd1 = plot(plotD1, "Lower Ext 1", color.new(bearColor, 40), 1, plot.style_linebr
 pd2 = plot(plotD2, "Lower Ext 2", color.new(bearColor, 40), 1, plot.style_linebr, force_overlay = true)
 pd3 = plot(plotD3, "Lower Ext 3", color.new(bearColor, 40), 1, plot.style_linebr, force_overlay = true)
 
-fill(pHigh, pu1, plotU1, plotHigh, color.new(bullColor, bgTransp + 10), color.new(bullColor, bgTransp), "Bull Zone 1", force_overlay = true)
-fill(pu1, pu2, plotU2, plotU1, color.new(bullColor, bgTransp + 5), color.new(bullColor, bgTransp + 10), "Bull Zone 2", force_overlay = true)
-fill(pu2, pu3, plotU3, plotU2, color.new(bullColor, bgTransp), color.new(bullColor, bgTransp + 5), "Bull Zone 3", force_overlay = true)
+fill(pHigh, pu1, plotU1, plotHigh, color.new(bullColor, bgTransp + 10), color.new(bullColor, bgTransp), "Bull Zone 1")
+fill(pu1, pu2, plotU2, plotU1, color.new(bullColor, bgTransp + 5), color.new(bullColor, bgTransp + 10), "Bull Zone 2")
+fill(pu2, pu3, plotU3, plotU2, color.new(bullColor, bgTransp), color.new(bullColor, bgTransp + 5), "Bull Zone 3")
 
-fill(pLow, pd1, plotLow, plotD1, color.new(bearColor, bgTransp), color.new(bearColor, bgTransp + 10), "Bear Zone 1", force_overlay = true)
-fill(pd1, pd2, plotD1, plotD2, color.new(bearColor, bgTransp + 10), color.new(bearColor, bgTransp + 5), "Bear Zone 2", force_overlay = true)
-fill(pd2, pd3, plotD2, plotD3, color.new(bearColor, bgTransp + 5), color.new(bearColor, bgTransp), "Bear Zone 3", force_overlay = true)
+fill(pLow, pd1, plotLow, plotD1, color.new(bearColor, bgTransp), color.new(bearColor, bgTransp + 10), "Bear Zone 1")
+fill(pd1, pd2, plotD1, plotD2, color.new(bearColor, bgTransp + 10), color.new(bearColor, bgTransp + 5), "Bear Zone 2")
+fill(pd2, pd3, plotD2, plotD3, color.new(bearColor, bgTransp + 5), color.new(bearColor, bgTransp), "Bear Zone 3")
 
 pTrail = plot(showTrail ? trailStop : na, "Trailing Stop", activeDir == 1 ? bullColor : bearColor, 2, plot.style_linebr, force_overlay = true)
 pPrice = plot(showTrail ? close : na, "Trail Price Ref", color.new(chart.fg_color, 100), force_overlay = true)
@@ -351,7 +351,7 @@ fill(pTrail, pPrice,
      bottom_value = activeDir == 1 ? trailStop : close, 
      top_color = activeDir == 1 ? color.new(bullColor, 50) : color.new(bearColor, 100), 
      bottom_color = activeDir == 1 ? color.new(bullColor, 100) : color.new(bearColor, 50), 
-    title = "Trailing Stop Fill", force_overlay = true)
+    title = "Trailing Stop Fill")
 
 if barstate.islast
     if showLabels
