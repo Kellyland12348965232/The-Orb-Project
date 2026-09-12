@@ -48,11 +48,6 @@ bgTransp                = input.int(85, "Background Transparency", minval = 0, m
 showLabels              = input.bool(true, "Show Level Labels", group = "Style")
 sigLabelSize            = input.string("Small", "Signal Label Size", options = ["Tiny", "Small", "Normal", "Large"], group = "Style")
 
-showVP                  = input.bool(true, "Show Volume Profile", group = "Volume Profile")
-vpRowsInput             = input.int(14, "Number of Rows", minval = 5, maxval = 50, group = "Volume Profile", tooltip = "Number of blocks to divide the opening range into. Lower values make the profile more 'blocky'.")
-vpWidth                 = input.int(30, "Profile Width (%)", minval = 1, maxval = 100, group = "Volume Profile", tooltip = "Width of the volume profile relative to the session length.")
-vpColor                 = input.color(color.new(#5b9cf6, 60), "Profile Color", group = "Volume Profile")
-
 stopPlotting            = input.bool(true, "Limit Plotting Duration", group = "Plotting Duration")
 stopTimeType            = input.string("New York Close", "End Plotting At", options = ["New York Close", "London Close", "Manual Time", "End of Day"], group = "Plotting Duration", tooltip = "Choose when to stop drawing the levels on the chart.")
 manualEndTime           = input.string("16:00", "Manual End Time (HH:MM)", group = "Plotting Duration", tooltip = "Format: HH:MM. Used if 'Manual Time' is selected.")
@@ -82,7 +77,6 @@ var parsedDashboardSize     = switch dashboardSizeInput
     HUGE            => size.huge
 
 atrVal = ta.atr(200)
-var float dynamicTickSize = na
 
 inSession = not na(time(timeframe.period, sessionInput + ":" + sessionDays, timezoneInput))
 isNewDay  = ta.change(time("D", "", timezoneInput)) != 0
@@ -105,11 +99,6 @@ var bool dayReachedU3 = false
 var bool dayReachedD1 = false
 var bool dayReachedD2 = false
 var bool dayReachedD3 = false
-
-var map<float, float> volMap = map.new<float, float>()
-var int sessionStartBar = 0
-var int profileAnchor = 0
-var box[] activeVPBoxes = array.new_box()
 
 var float totalProfit = 0.0
 var float entryPrice  = na
@@ -154,14 +143,9 @@ if isNewDay or (inSession and not inSession[1])
     dayReachedD1 := false
     dayReachedD2 := false
     dayReachedD3 := false
-    volMap.clear()
-    sessionStartBar := bar_index
-    profileAnchor := bar_index
-    activeVPBoxes.clear()
     entryPrice := na
     optStops.fill(na)
     optActive.fill(0)
-    dynamicTickSize := math.max(syminfo.mintick, nz(atrVal, high - low) / vpRowsInput)
 
 if inSession
     float currentHigh = srcInput == "High/Low" ? high : math.max(open, close)
@@ -169,14 +153,6 @@ if inSession
     
     orHigh := na(orHigh) ? currentHigh : math.max(orHigh, currentHigh)
     orLow  := na(orLow) ? currentLow  : math.min(orLow, currentLow)
-    profileAnchor := bar_index
-
-    float currentRange = orHigh - orLow
-    if currentRange > 0
-        dynamicTickSize := math.max(syminfo.mintick, currentRange / vpRowsInput)
-
-    float priceLevel = math.round(close / dynamicTickSize) * dynamicTickSize
-    volMap.put(priceLevel, (volMap.contains(priceLevel) ? volMap.get(priceLevel) : 0) + volume)
 
 if not inSession and inSession[1]
     sessionEnded := true
@@ -235,9 +211,6 @@ plotD3   = displayAllowed and showExtensions ? d3 : na
 
 atrTrail = ta.atr(trailAtrLen)
 
-volSMA = ta.sma(volume, 20)
-isHV = volume > volSMA
-volSuffix = isHV ? " (HV)" : " (LV)"
 szSignal = sigLabelSize == "Tiny" ? size.tiny : sigLabelSize == "Small" ? size.small : sigLabelSize == "Normal" ? size.normal : size.large
 
 bool breakoutUp = ta.crossover(close, orHigh) and not inSession and sessionEnded
@@ -250,7 +223,7 @@ if isNewDay or inSession
     trailStop   := na
 
 if breakoutUp and canSignalUp and displayAllowed
-    label.new(bar_index, high, "BULL BREAK" + volSuffix, color = bullColor, style = label.style_label_down, textcolor = color.white, size = szSignal)
+    label.new(bar_index, high, "BULL BREAK", color = bullColor, style = label.style_label_down, textcolor = color.white, size = szSignal)
     canSignalUp := false
     if activeDir == 0
         activeDir  := 1
@@ -261,7 +234,7 @@ if breakoutUp and canSignalUp and displayAllowed
             optStops.set(i, low - (atrTrail * optMults.get(i)))
 
 if breakoutDn and canSignalDn and displayAllowed
-    label.new(bar_index, low, "BEAR BREAK" + volSuffix, color = bearColor, style = label.style_label_up, textcolor = color.white, size = szSignal)
+    label.new(bar_index, low, "BEAR BREAK", color = bearColor, style = label.style_label_up, textcolor = color.white, size = szSignal)
     canSignalDn := false
     if activeDir == 0
         activeDir  := -1
@@ -339,34 +312,6 @@ fill(pTrail, pPrice,
      title = "Trailing Stop Fill")
 
 if barstate.islast
-    if showVP and volMap.size() > 0
-        if activeVPBoxes.size() > 0
-            for b in activeVPBoxes
-                b.delete()
-            activeVPBoxes.clear()
-
-        float maxVol = 0.0
-        float[] prices = volMap.keys()
-        for p in prices
-            maxVol := math.max(maxVol, volMap.get(p))
-        
-        if prices.size() > 0
-            prices.sort()
-            int profileMaxBars = 15 
-            float levelHeight = dynamicTickSize
-            int startX = bar_index + 25
-            
-            for i = 0 to prices.size() - 1
-                float p = prices.get(i)
-                if p >= (orLow - levelHeight / 2) and p <= (orHigh + levelHeight / 2)
-                    float vol = volMap.get(p)
-                    bool  isPOC = vol == maxVol
-                    int bars = math.max(1, math.round((vol / math.max(1e-10, maxVol)) * profileMaxBars))
-                    color cellColor = isPOC ? color.new(vpColor, 0) : color.new(vpColor, 40)
-                    box nb = box.new(startX, p + levelHeight / 2, startX + bars, p - levelHeight / 2, 
-                                     border_color = color.new(vpColor, 100), bgcolor = cellColor)
-                    activeVPBoxes.push(nb)
-
     if showLabels
         label.delete(label.new(bar_index + 2, orHigh, "OR High", color = neutralColor, style = label.style_label_left, textcolor = color.white, size = size.small)[1])
         label.delete(label.new(bar_index + 2, orLow, "OR Low", color = neutralColor, style = label.style_label_left, textcolor = color.white, size = size.small)[1])
