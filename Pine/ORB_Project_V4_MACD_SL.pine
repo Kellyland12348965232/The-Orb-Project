@@ -55,7 +55,7 @@ trailMult               = input.float(2.0, "ATR Multiplier", minval = 0.1, step 
 trailAtrLen             = input.int(14, "ATR Length", minval = 1, group = "Trailing Stop")
 
 enableBreakoutCandleSL  = input.bool(false, "Enable Breakout Candle Stop Loss", group = "Stop Loss")
-stopLossBufferPips      = input.float(10.0, "Stop Loss Buffer (Pips)", minval = 0, group = "Stop Loss")
+stopLossBuffer          = input.float(10.0, "Stop Loss Buffer (Price Units)", minval = 0, step = 0.1, group = "Stop Loss")
 
 dashboardInput          = input.bool(true, 'Show Hit Rate Dashboard', group = DASHBOARD_GROUP, tooltip = dashboardTooltip)
 showOptimizer           = input.bool(false, 'Show Stop Optimizer', group = DASHBOARD_GROUP, tooltip = "Simulates different ATR multipliers to find the most profitable distance.")
@@ -144,6 +144,7 @@ var bool dayReachedD3 = false
 var float totalProfit = 0.0
 var float entryPrice  = na
 var float fixedStopLoss = na
+var int fixedStopEntryBar = na
 
 var float[] optProfits = array.from(0.0, 0.0, 0.0, 0.0, 0.0)
 var float[] optMults   = array.from(1.0, 1.5, 2.0, 2.5, 3.0)
@@ -185,8 +186,11 @@ if isNewDay or (inSession and not inSession[1])
     dayReachedD1 := false
     dayReachedD2 := false
     dayReachedD3 := false
+
+if isNewDay
     entryPrice := na
     fixedStopLoss := na
+    fixedStopEntryBar := na
     optStops.fill(na)
     optActive.fill(0)
 
@@ -260,15 +264,16 @@ bool breakoutUp = ta.crossover(close, orHigh) and not inSession and sessionEnded
 bool breakoutDn = ta.crossunder(close, orLow) and not inSession and sessionEnded
 bool breakoutUpConfirmed = breakoutUp and macdValue > macdSignalValue
 bool breakoutDnConfirmed = breakoutDn and macdValue < macdSignalValue
-float pipBuffer = stopLossBufferPips * syminfo.mintick * 10
-bool fixedLongStopHit = enableBreakoutCandleSL and activeDir == 1 and not na(fixedStopLoss) and low <= fixedStopLoss
-bool fixedShortStopHit = enableBreakoutCandleSL and activeDir == -1 and not na(fixedStopLoss) and high >= fixedStopLoss
+bool fixedLongStopHit = enableBreakoutCandleSL and activeDir == 1 and not na(fixedStopLoss) and bar_index > fixedStopEntryBar and low <= fixedStopLoss
+bool fixedShortStopHit = enableBreakoutCandleSL and activeDir == -1 and not na(fixedStopLoss) and bar_index > fixedStopEntryBar and high >= fixedStopLoss
 
 if isNewDay or inSession
     canSignalUp := true
     canSignalDn := true
-    activeDir   := 0
-    trailStop   := na
+
+if isNewDay
+    activeDir := 0
+    trailStop := na
 
 if breakoutUpConfirmed and canSignalUp and displayAllowed
     label.new(bar_index, high, "BULL BREAK", color = bullColor, style = label.style_label_down, textcolor = color.white, size = szSignal, force_overlay = true)
@@ -276,7 +281,8 @@ if breakoutUpConfirmed and canSignalUp and displayAllowed
     if activeDir == 0
         activeDir  := 1
         entryPrice := orHigh
-        fixedStopLoss := low - pipBuffer
+        fixedStopLoss := enableBreakoutCandleSL ? low - stopLossBuffer : na
+        fixedStopEntryBar := enableBreakoutCandleSL ? bar_index : na
         trailStop  := low - (atrTrail * trailMult)
         for i = 0 to 4
             optActive.set(i, 1)
@@ -288,7 +294,8 @@ if breakoutDnConfirmed and canSignalDn and displayAllowed
     if activeDir == 0
         activeDir  := -1
         entryPrice := orLow
-        fixedStopLoss := high + pipBuffer
+        fixedStopLoss := enableBreakoutCandleSL ? high + stopLossBuffer : na
+        fixedStopEntryBar := enableBreakoutCandleSL ? bar_index : na
         trailStop  := high + (atrTrail * trailMult)
         for i = 0 to 4
             optActive.set(i, -1)
@@ -301,11 +308,13 @@ if activeDir == 1
         activeDir := 0
         trailStop := na
         fixedStopLoss := na
+        fixedStopEntryBar := na
     else if close < trailStop or not displayAllowed
         totalProfit += (close - entryPrice)
         activeDir := 0
         trailStop := na
         fixedStopLoss := na
+        fixedStopEntryBar := na
 
 if activeDir == -1
     trailStop := math.min(nz(trailStop[1], high + (atrTrail * trailMult)), high + (atrTrail * trailMult))
@@ -328,19 +337,13 @@ if showOptimizer
         if a == 1
             newStop = math.max(nz(s, low - (atrTrail * m)), low - (atrTrail * m))
             optStops.set(i, newStop)
-            if fixedLongStopHit
-                optProfits.set(i, optProfits.get(i) + (fixedStopLoss - entryPrice))
-                optActive.set(i, 0)
-            else if close < newStop or not displayAllowed
+            if close < newStop or not displayAllowed
                 optProfits.set(i, optProfits.get(i) + (close - entryPrice))
                 optActive.set(i, 0)
         else if a == -1
             newStop = math.min(nz(s, high + (atrTrail * m)), high + (atrTrail * m))
             optStops.set(i, newStop)
-            if fixedShortStopHit
-                optProfits.set(i, optProfits.get(i) + (entryPrice - fixedStopLoss))
-                optActive.set(i, 0)
-            else if close > newStop or not displayAllowed
+            if close > newStop or not displayAllowed
                 optProfits.set(i, optProfits.get(i) + (entryPrice - close))
                 optActive.set(i, 0)
 
