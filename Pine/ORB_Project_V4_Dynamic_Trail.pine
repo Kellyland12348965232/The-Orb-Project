@@ -50,12 +50,10 @@ stopPlotting            = input.bool(true, "Limit Plotting Duration", group = "P
 stopTimeType            = input.string("New York Close", "End Plotting At", options = ["New York Close", "London Close", "Manual Time", "End of Day"], group = "Plotting Duration", tooltip = "Choose when to stop drawing the levels on the chart.")
 manualEndTime           = input.string("16:00", "Manual End Time (HH:MM)", group = "Plotting Duration", tooltip = "Format: HH:MM. Used if 'Manual Time' is selected.")
 
-showTrail               = input.bool(false, "Show Trailing Stop", group = "Trailing Stop")
+trailMode               = input.string("OFF", "Trailing Stop Mode", options = ["OFF", "ATR", "DYNAMIC R"], group = "Trailing Stop")
+showTrail               = input.bool(true, "Show Trailing Stop", group = "Trailing Stop")
 trailMult               = input.float(2.0, "ATR Multiplier", minval = 0.1, step = 0.1, group = "Trailing Stop", tooltip = "Multiplier for the ATR-based trailing stop.")
 trailAtrLen             = input.int(14, "ATR Length", minval = 1, group = "Trailing Stop")
-
-enableBreakoutCandleSL  = input.bool(false, "Enable Breakout Candle Stop Loss", group = "Stop Loss")
-stopLossBuffer          = input.float(10.0, "Stop Loss Buffer (Price Units)", minval = 0, step = 0.1, group = "Stop Loss")
 
 dashboardInput          = input.bool(true, 'Show Hit Rate Dashboard', group = DASHBOARD_GROUP, tooltip = dashboardTooltip)
 showOptimizer           = input.bool(false, 'Show Stop Optimizer', group = DASHBOARD_GROUP, tooltip = "Simulates different ATR multipliers to find the most profitable distance.")
@@ -143,8 +141,10 @@ var bool dayReachedD3 = false
 
 var float totalProfit = 0.0
 var float entryPrice  = na
-var float fixedStopLoss = na
-var int fixedStopEntryBar = na
+var float dynamicR = na
+var float dynamicStop = na
+var float dynamicStopPlot = na
+var int dynamicTrailEntryBar = na
 
 var float[] optProfits = array.from(0.0, 0.0, 0.0, 0.0, 0.0)
 var float[] optMults   = array.from(1.0, 1.5, 2.0, 2.5, 3.0)
@@ -186,11 +186,10 @@ if isNewDay or (inSession and not inSession[1])
     dayReachedD1 := false
     dayReachedD2 := false
     dayReachedD3 := false
-
-if isNewDay
     entryPrice := na
-    fixedStopLoss := na
-    fixedStopEntryBar := na
+    dynamicR := na
+    dynamicStop := na
+    dynamicTrailEntryBar := na
     optStops.fill(na)
     optActive.fill(0)
 
@@ -264,16 +263,14 @@ bool breakoutUp = ta.crossover(close, orHigh) and not inSession and sessionEnded
 bool breakoutDn = ta.crossunder(close, orLow) and not inSession and sessionEnded
 bool breakoutUpConfirmed = breakoutUp and macdValue > macdSignalValue
 bool breakoutDnConfirmed = breakoutDn and macdValue < macdSignalValue
-bool fixedLongStopHit = enableBreakoutCandleSL and activeDir == 1 and not na(fixedStopLoss) and bar_index > fixedStopEntryBar and low <= fixedStopLoss
-bool fixedShortStopHit = enableBreakoutCandleSL and activeDir == -1 and not na(fixedStopLoss) and bar_index > fixedStopEntryBar and high >= fixedStopLoss
+
+dynamicStopPlot := na
 
 if isNewDay or inSession
     canSignalUp := true
     canSignalDn := true
-
-if isNewDay
-    activeDir := 0
-    trailStop := na
+    activeDir   := 0
+    trailStop   := na
 
 if breakoutUpConfirmed and canSignalUp and displayAllowed
     label.new(bar_index, high, "BULL BREAK", color = bullColor, style = label.style_label_down, textcolor = color.white, size = szSignal, force_overlay = true)
@@ -281,8 +278,10 @@ if breakoutUpConfirmed and canSignalUp and displayAllowed
     if activeDir == 0
         activeDir  := 1
         entryPrice := orHigh
-        fixedStopLoss := enableBreakoutCandleSL ? low - stopLossBuffer : na
-        fixedStopEntryBar := enableBreakoutCandleSL ? bar_index : na
+        dynamicR := trailMode == "DYNAMIC R" and high > orHigh ? high - orHigh : na
+        dynamicStop := na
+        dynamicTrailEntryBar := trailMode == "DYNAMIC R" ? bar_index : na
+        dynamicStopPlot := trailMode == "DYNAMIC R" and not na(dynamicR) ? entryPrice : na
         trailStop  := low - (atrTrail * trailMult)
         for i = 0 to 4
             optActive.set(i, 1)
@@ -294,8 +293,10 @@ if breakoutDnConfirmed and canSignalDn and displayAllowed
     if activeDir == 0
         activeDir  := -1
         entryPrice := orLow
-        fixedStopLoss := enableBreakoutCandleSL ? high + stopLossBuffer : na
-        fixedStopEntryBar := enableBreakoutCandleSL ? bar_index : na
+        dynamicR := trailMode == "DYNAMIC R" and low < orLow ? orLow - low : na
+        dynamicStop := na
+        dynamicTrailEntryBar := trailMode == "DYNAMIC R" ? bar_index : na
+        dynamicStopPlot := trailMode == "DYNAMIC R" and not na(dynamicR) ? entryPrice : na
         trailStop  := high + (atrTrail * trailMult)
         for i = 0 to 4
             optActive.set(i, -1)
@@ -303,31 +304,49 @@ if breakoutDnConfirmed and canSignalDn and displayAllowed
 
 if activeDir == 1
     trailStop := math.max(nz(trailStop[1], low - (atrTrail * trailMult)), low - (atrTrail * trailMult))
-    if fixedLongStopHit
-        totalProfit += (fixedStopLoss - entryPrice)
+    if trailMode == "DYNAMIC R" and not na(dynamicR) and bar_index > dynamicTrailEntryBar
+        int reachedR = int(math.floor((high - entryPrice) / dynamicR))
+        if reachedR >= 1
+            float candidateStop = entryPrice + (reachedR - 1) * dynamicR
+            dynamicStop := na(dynamicStop) ? candidateStop : math.max(dynamicStop, candidateStop)
+        dynamicStopPlot := not na(dynamicStop) ? dynamicStop : entryPrice
+    if trailMode == "DYNAMIC R" and not na(dynamicStop) and bar_index > dynamicTrailEntryBar and low <= dynamicStop
+        totalProfit += (dynamicStop - entryPrice)
         activeDir := 0
         trailStop := na
-        fixedStopLoss := na
-        fixedStopEntryBar := na
-    else if close < trailStop or not displayAllowed
+        dynamicR := na
+        dynamicStop := na
+        dynamicTrailEntryBar := na
+    else if trailMode == "ATR" and (close < trailStop or not displayAllowed)
         totalProfit += (close - entryPrice)
         activeDir := 0
         trailStop := na
-        fixedStopLoss := na
-        fixedStopEntryBar := na
+        dynamicR := na
+        dynamicStop := na
+        dynamicTrailEntryBar := na
 
 if activeDir == -1
     trailStop := math.min(nz(trailStop[1], high + (atrTrail * trailMult)), high + (atrTrail * trailMult))
-    if fixedShortStopHit
-        totalProfit += (entryPrice - fixedStopLoss)
+    if trailMode == "DYNAMIC R" and not na(dynamicR) and bar_index > dynamicTrailEntryBar
+        int reachedR = int(math.floor((entryPrice - low) / dynamicR))
+        if reachedR >= 1
+            float candidateStop = entryPrice - (reachedR - 1) * dynamicR
+            dynamicStop := na(dynamicStop) ? candidateStop : math.min(dynamicStop, candidateStop)
+        dynamicStopPlot := not na(dynamicStop) ? dynamicStop : entryPrice
+    if trailMode == "DYNAMIC R" and not na(dynamicStop) and bar_index > dynamicTrailEntryBar and high >= dynamicStop
+        totalProfit += (entryPrice - dynamicStop)
         activeDir := 0
         trailStop := na
-        fixedStopLoss := na
-    else if close > trailStop or not displayAllowed
+        dynamicR := na
+        dynamicStop := na
+        dynamicTrailEntryBar := na
+    else if trailMode == "ATR" and (close > trailStop or not displayAllowed)
         totalProfit += (entryPrice - close)
         activeDir := 0
         trailStop := na
-        fixedStopLoss := na
+        dynamicR := na
+        dynamicStop := na
+        dynamicTrailEntryBar := na
 
 if showOptimizer
     for i = 0 to 4
@@ -373,15 +392,8 @@ fill(pLow, pd1, plotLow, plotD1, color.new(bearColor, bgTransp), color.new(bearC
 fill(pd1, pd2, plotD1, plotD2, color.new(bearColor, bgTransp + 10), color.new(bearColor, bgTransp + 5), "Bear Zone 2")
 fill(pd2, pd3, plotD2, plotD3, color.new(bearColor, bgTransp + 5), color.new(bearColor, bgTransp), "Bear Zone 3")
 
-pTrail = plot(showTrail ? trailStop : na, "Trailing Stop", activeDir == 1 ? bullColor : bearColor, 2, plot.style_linebr, force_overlay = true)
-pPrice = plot(showTrail ? close : na, "Trail Price Ref", color.new(chart.fg_color, 100), force_overlay = true)
-plot(enableBreakoutCandleSL and activeDir != 0 ? fixedStopLoss : na, "Structural Stop Loss", color = bearColor, linewidth = 2, style = plot.style_linebr, force_overlay = true)
-fill(pTrail, pPrice, 
-     top_value = activeDir == 1 ? close : trailStop, 
-     bottom_value = activeDir == 1 ? trailStop : close, 
-     top_color = activeDir == 1 ? color.new(bullColor, 50) : color.new(bearColor, 100), 
-     bottom_color = activeDir == 1 ? color.new(bullColor, 100) : color.new(bearColor, 50), 
-    title = "Trailing Stop Fill")
+pTrail = plot(showTrail and trailMode == "ATR" ? trailStop : na, "Trailing Stop", activeDir == 1 ? bullColor : bearColor, 2, plot.style_linebr, force_overlay = true)
+plot(showTrail and trailMode == "DYNAMIC R" ? dynamicStopPlot : na, "Dynamic Trail Stop", color = neutralColor, linewidth = 2, style = plot.style_linebr, force_overlay = true)
 
 if barstate.islast
     if showLabels
