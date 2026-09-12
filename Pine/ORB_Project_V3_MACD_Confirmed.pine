@@ -59,7 +59,6 @@ showOptimizer           = input.bool(false, 'Show Stop Optimizer', group = DASHB
 dashboardPositionInput  = input.string(TOP_RIGHT, 'Position', group = DASHBOARD_GROUP, tooltip = dashboardPositionTooltip, options = [TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT])
 dashboardSizeInput      = input.string(SMALL, 'Size', group = DASHBOARD_GROUP, tooltip = dashboardSizeTooltip, options = [TINY, SMALL, NORMAL, LARGE, HUGE])
 
-macdFilterEnabled       = input.bool(false, "Enable MACD Filter", group = "MACD")
 macdUseCurrentTimeframe = input.bool(true, "Use Current Chart Timeframe", group = "MACD")
 macdTimeframe           = input.timeframe("60", "MACD Timeframe", group = "MACD")
 macdFastLength          = input.int(12, "MACD Fast Length", minval = 1, group = "MACD")
@@ -83,9 +82,6 @@ macdValue       = request.security(syminfo.tickerid, macdResolution, macdLine)
 macdSignalValue = request.security(syminfo.tickerid, macdResolution, macdSignal)
 macdHistValue   = request.security(syminfo.tickerid, macdResolution, macdHist)
 
-macdLongOK  = not macdFilterEnabled or macdValue > macdSignalValue
-macdShortOK = not macdFilterEnabled or macdValue < macdSignalValue
-
 histA_IsUp   = macdHistValue > macdHistValue[1] and macdHistValue > 0
 histA_IsDown = macdHistValue < macdHistValue[1] and macdHistValue > 0
 histB_IsDown = macdHistValue < macdHistValue[1] and macdHistValue <= 0
@@ -101,7 +97,6 @@ signalLineColor = macd_IsAbove ? color.yellow : color.yellow
 plot(macdValue, title = "MACD", color = macdLineColor, linewidth = 4)
 plot(macdSignalValue, title = "Signal Line", color = signalLineColor, style = plot.style_line, linewidth = 2)
 plot(macdHistValue, title = "Histogram", color = macdHistColor, style = plot.style_histogram, linewidth = 4)
-plot(0, title = "MACD Pane Test", color = color.new(color.white, 100))
 hline(0, "0 Line", linestyle = hline.style_solid, linewidth = 2, color = color.white)
 
 //---------------------------------------------------------------------------------------------------------------------}
@@ -258,6 +253,8 @@ szSignal = sigLabelSize == "Tiny" ? size.tiny : sigLabelSize == "Small" ? size.s
 
 bool breakoutUp = ta.crossover(close, orHigh) and not inSession and sessionEnded
 bool breakoutDn = ta.crossunder(close, orLow) and not inSession and sessionEnded
+bool breakoutUpConfirmed = breakoutUp and macdValue > macdSignalValue
+bool breakoutDnConfirmed = breakoutDn and macdValue < macdSignalValue
 
 if isNewDay or inSession
     canSignalUp := true
@@ -265,7 +262,7 @@ if isNewDay or inSession
     activeDir   := 0
     trailStop   := na
 
-if breakoutUp and canSignalUp and displayAllowed
+if breakoutUpConfirmed and canSignalUp and displayAllowed
     label.new(bar_index, high, "BULL BREAK", color = bullColor, style = label.style_label_down, textcolor = color.white, size = szSignal, force_overlay = true)
     canSignalUp := false
     if activeDir == 0
@@ -276,7 +273,7 @@ if breakoutUp and canSignalUp and displayAllowed
             optActive.set(i, 1)
             optStops.set(i, low - (atrTrail * optMults.get(i)))
 
-if breakoutDn and canSignalDn and displayAllowed
+if breakoutDnConfirmed and canSignalDn and displayAllowed
     label.new(bar_index, low, "BEAR BREAK", color = bearColor, style = label.style_label_up, textcolor = color.white, size = szSignal, force_overlay = true)
     canSignalDn := false
     if activeDir == 0
@@ -465,8 +462,8 @@ if dashboardInput
 //---------------------------------------------------------------------------------------------------------------------}
 // Alerts
 //---------------------------------------------------------------------------------------------------------------------{
-alertcondition(breakoutUp, "Bullish ORB", "Price broke above the opening range.")
-alertcondition(breakoutDn, "Bearish ORB", "Price broke below the opening range.")
+alertcondition(breakoutUpConfirmed, "Bullish ORB", "Price broke above the opening range with MACD confirmation.")
+alertcondition(breakoutDnConfirmed, "Bearish ORB", "Price broke below the opening range with MACD confirmation.")
 alertcondition(ta.cross(close, u3), "Target 3 Reached", "Price reached the final bullish target.")
 alertcondition(ta.cross(close, d3), "Target 3 Reached", "Price reached the final bearish target.")
 
