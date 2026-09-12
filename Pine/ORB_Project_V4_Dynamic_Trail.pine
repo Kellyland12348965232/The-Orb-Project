@@ -144,6 +144,12 @@ var float entryPrice  = na
 var float dynamicR = na
 var float dynamicStop = na
 var float dynamicStopPlot = na
+var bool dynamicTrailStart = false
+var bool dynamicTrailHit = false
+var bool dynamicTrailStep = false
+var float dynamicTrailHitPrice = na
+var float dynamicTrailStepPrice = na
+var int dynamicTrailStepR = na
 var int dynamicTrailEntryBar = na
 
 var float[] optProfits = array.from(0.0, 0.0, 0.0, 0.0, 0.0)
@@ -265,6 +271,12 @@ bool breakoutUpConfirmed = breakoutUp and macdValue > macdSignalValue
 bool breakoutDnConfirmed = breakoutDn and macdValue < macdSignalValue
 
 dynamicStopPlot := na
+dynamicTrailStart := false
+dynamicTrailHit := false
+dynamicTrailStep := false
+dynamicTrailHitPrice := na
+dynamicTrailStepPrice := na
+dynamicTrailStepR := na
 
 if isNewDay or inSession
     canSignalUp := true
@@ -277,11 +289,12 @@ if breakoutUpConfirmed and canSignalUp and displayAllowed
     canSignalUp := false
     if activeDir == 0
         activeDir  := 1
-        entryPrice := orHigh
-        dynamicR := trailMode == "DYNAMIC R" and high > orHigh ? high - orHigh : na
-        dynamicStop := na
+        entryPrice := trailMode == "DYNAMIC R" ? close : orHigh
+        dynamicR := trailMode == "DYNAMIC R" ? close - low : na
+        dynamicStop := trailMode == "DYNAMIC R" and not na(dynamicR) and dynamicR > 0 ? low : na
         dynamicTrailEntryBar := trailMode == "DYNAMIC R" ? bar_index : na
-        dynamicStopPlot := trailMode == "DYNAMIC R" and not na(dynamicR) ? entryPrice : na
+        dynamicStopPlot := trailMode == "DYNAMIC R" and not na(dynamicStop) ? dynamicStop : na
+        dynamicTrailStart := trailMode == "DYNAMIC R" and not na(dynamicStop)
         trailStop  := low - (atrTrail * trailMult)
         for i = 0 to 4
             optActive.set(i, 1)
@@ -292,11 +305,12 @@ if breakoutDnConfirmed and canSignalDn and displayAllowed
     canSignalDn := false
     if activeDir == 0
         activeDir  := -1
-        entryPrice := orLow
-        dynamicR := trailMode == "DYNAMIC R" and low < orLow ? orLow - low : na
-        dynamicStop := na
+        entryPrice := trailMode == "DYNAMIC R" ? close : orLow
+        dynamicR := trailMode == "DYNAMIC R" ? high - close : na
+        dynamicStop := trailMode == "DYNAMIC R" and not na(dynamicR) and dynamicR > 0 ? high : na
         dynamicTrailEntryBar := trailMode == "DYNAMIC R" ? bar_index : na
-        dynamicStopPlot := trailMode == "DYNAMIC R" and not na(dynamicR) ? entryPrice : na
+        dynamicStopPlot := trailMode == "DYNAMIC R" and not na(dynamicStop) ? dynamicStop : na
+        dynamicTrailStart := trailMode == "DYNAMIC R" and not na(dynamicStop)
         trailStop  := high + (atrTrail * trailMult)
         for i = 0 to 4
             optActive.set(i, -1)
@@ -308,9 +322,16 @@ if activeDir == 1
         int reachedR = int(math.floor((high - entryPrice) / dynamicR))
         if reachedR >= 1
             float candidateStop = entryPrice + (reachedR - 1) * dynamicR
+            bool stepChanged = na(dynamicStop) or candidateStop > dynamicStop
             dynamicStop := na(dynamicStop) ? candidateStop : math.max(dynamicStop, candidateStop)
+            if stepChanged
+                dynamicTrailStep := true
+                dynamicTrailStepPrice := dynamicStop
+                dynamicTrailStepR := reachedR
         dynamicStopPlot := not na(dynamicStop) ? dynamicStop : entryPrice
     if trailMode == "DYNAMIC R" and not na(dynamicStop) and bar_index > dynamicTrailEntryBar and low <= dynamicStop
+        dynamicTrailHit := true
+        dynamicTrailHitPrice := dynamicStop
         totalProfit += (dynamicStop - entryPrice)
         activeDir := 0
         trailStop := na
@@ -331,9 +352,16 @@ if activeDir == -1
         int reachedR = int(math.floor((entryPrice - low) / dynamicR))
         if reachedR >= 1
             float candidateStop = entryPrice - (reachedR - 1) * dynamicR
+            bool stepChanged = na(dynamicStop) or candidateStop < dynamicStop
             dynamicStop := na(dynamicStop) ? candidateStop : math.min(dynamicStop, candidateStop)
+            if stepChanged
+                dynamicTrailStep := true
+                dynamicTrailStepPrice := dynamicStop
+                dynamicTrailStepR := reachedR
         dynamicStopPlot := not na(dynamicStop) ? dynamicStop : entryPrice
     if trailMode == "DYNAMIC R" and not na(dynamicStop) and bar_index > dynamicTrailEntryBar and high >= dynamicStop
+        dynamicTrailHit := true
+        dynamicTrailHitPrice := dynamicStop
         totalProfit += (entryPrice - dynamicStop)
         activeDir := 0
         trailStop := na
@@ -394,6 +422,10 @@ fill(pd2, pd3, plotD2, plotD3, color.new(bearColor, bgTransp + 5), color.new(bea
 
 pTrail = plot(showTrail and trailMode == "ATR" ? trailStop : na, "Trailing Stop", activeDir == 1 ? bullColor : bearColor, 2, plot.style_linebr, force_overlay = true)
 plot(showTrail and trailMode == "DYNAMIC R" ? dynamicStopPlot : na, "Dynamic Trail Stop", color = neutralColor, linewidth = 2, style = plot.style_linebr, force_overlay = true)
+plotshape(dynamicTrailStart ? (breakoutUpConfirmed ? low : high) : na, "Dynamic Trail Start", shape.circle, location.absolute, breakoutUpConfirmed ? bullColor : bearColor, size = size.tiny, text = "Entry", textcolor = color.white, force_overlay = true)
+if dynamicTrailStep
+    label.new(bar_index, dynamicTrailStepPrice, "+" + str.tostring(dynamicTrailStepR) + "R", color = neutralColor, style = label.style_label_left, textcolor = color.white, size = size.tiny, force_overlay = true)
+plotshape(dynamicTrailHit ? dynamicTrailHitPrice : na, "Dynamic Trail Hit", shape.xcross, location.absolute, bearColor, size = size.small, text = "Trail Hit", textcolor = color.white, force_overlay = true)
 
 if barstate.islast
     if showLabels
