@@ -1,5 +1,5 @@
 //@version=6
-indicator(title="CM_MacD_Ult_MTF", shorttitle="CM_Ult_MacD_MTF")
+indicator(title="CM_MacD_Ult_MTF", shorttitle="CM_Ult_MacD_MTF", overlay=false)
 
 source = close
 
