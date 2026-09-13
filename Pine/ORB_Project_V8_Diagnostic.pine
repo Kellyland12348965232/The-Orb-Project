@@ -314,6 +314,28 @@ if breakoutDnConfirmed and activeDir == 0 and dailyLosses < 2 and (na(lastTradeE
             optActive.set(i, -1)
             optStops.set(i, high + (atrTrail * optMults.get(i)))
             optTrades.set(i, optTrades.get(i) + 1)
+if breakoutDn and not (breakoutDnConfirmed and activeDir == 0 and dailyLosses < 2 and (na(lastTradeExitBar) or bar_index > lastTradeExitBar) and displayAllowed)
+    string blockedBy = ""
+    if not breakoutDnConfirmed
+        blockedBy += "MACD not bearish; "
+    if activeDir != 0
+        blockedBy += "activeDir != 0; "
+    if dailyLosses >= 2
+        blockedBy += "dailyLosses >= 2; "
+    if not na(lastTradeExitBar) and bar_index <= lastTradeExitBar
+        blockedBy += "same/earlier exit bar; "
+    if not displayAllowed
+        blockedBy += "displayAllowed=false; "
+    label.new(bar_index, low, "DEBUG BEAR BREAK\n" +
+              "breakoutDn=true\n" +
+              "MACD bearish=" + str.tostring(macdValue < macdSignalValue) + "\n" +
+              "activeDir=" + str.tostring(activeDir) + "\n" +
+              "dailyLosses=" + str.tostring(dailyLosses) + "\n" +
+              "lastTradeExitBar=" + str.tostring(lastTradeExitBar) + "\n" +
+              "displayAllowed=" + str.tostring(displayAllowed) + "\n" +
+              "BLOCKED: " + blockedBy,
+              color = color.new(bearColor, 0), style = label.style_label_up, textcolor = color.white, size = size.small, force_overlay = true)
+
 
 if activeDir == 1
     trailStop := math.max(nz(trailStop[1], low - (atrTrail * trailMult)), low - (atrTrail * trailMult))
@@ -338,7 +360,7 @@ if activeDir == 1
                     dynamicTrailHitPrice := dynamicStop
                     float tradeResultR = (dynamicStop - entryPrice) / dynamicR
                     dynamicRTotalProfit += tradeResultR
-                    if tradeResultR <= 0
+                    if tradeResultR < 0
                         dailyLosses += 1
                     activeDir := 0
                     lastTradeExitBar := bar_index
@@ -350,7 +372,7 @@ if activeDir == 1
     if trailMode == "ATR" and (close < trailStop or not displayAllowed)
         float tradeResult = close - entryPrice
         atrTotalProfit += tradeResult
-        if tradeResult <= 0
+        if tradeResult < 0
             dailyLosses += 1
         activeDir := 0
         lastTradeExitBar := bar_index
@@ -382,7 +404,7 @@ if activeDir == -1
                     dynamicTrailHitPrice := dynamicStop
                     float tradeResultR = (entryPrice - dynamicStop) / dynamicR
                     dynamicRTotalProfit += tradeResultR
-                    if tradeResultR <= 0
+                    if tradeResultR < 0
                         dailyLosses += 1
                     activeDir := 0
                     lastTradeExitBar := bar_index
@@ -394,7 +416,7 @@ if activeDir == -1
     if trailMode == "ATR" and (close > trailStop or not displayAllowed)
         float tradeResult = entryPrice - close
         atrTotalProfit += tradeResult
-        if tradeResult <= 0
+        if tradeResult < 0
             dailyLosses += 1
         activeDir := 0
         lastTradeExitBar := bar_index
